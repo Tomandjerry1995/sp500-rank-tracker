@@ -1,8 +1,8 @@
-# file: projects/sp500-rank-tracker/.github/workflows/pages.yml
+# file: .github/workflows/pages.yml
 name: pages-daily
 on:
   schedule:
-    - cron: "15 22 * * 1-5"   # 工作日 22:15 UTC，按需改
+    - cron: "0 0 * * *"   # 每天 UTC 00:00 = 北京时间 08:00
   workflow_dispatch: {}
 permissions:
   contents: write
@@ -15,17 +15,21 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - run: pip install -e .
-      - name: Fetch & build interactive plot (100 lines)
+      - name: Fetch latest data
         run: |
           python -m sp500_tracker.cli fetch
-          # 生成交互大图 (100 条；你也可以用 500)
+      - name: Build interactive plots (Top50 & Top100)
+        run: |
+          # 生成 Top50
+          python -m sp500_tracker.cli plot --interactive --top 500 --max-lines 50
+          ls -t data/plots/*.html | head -n 1 | xargs -I{} cp "{}" docs/latest-50.html
+          # 生成 Top100
           python -m sp500_tracker.cli plot --interactive --top 500 --max-lines 100
-          # 拷贝最新生成的 HTML 到 docs/latest.html
-          ls -t data/plots/*.html | head -n 1 | xargs -I{} cp "{}" docs/latest.html
-      - name: Commit artifacts to docs/
+          ls -t data/plots/*.html | head -n 1 | xargs -I{} cp "{}" docs/latest-100.html
+      - name: Commit docs
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/latest.html docs/index.html
-          git commit -m "Update latest interactive plot" || echo "No changes"
+          git add docs/latest-50.html docs/latest-100.html docs/index.html
+          git commit -m "Daily update (UTC 00:00): latest Top50 & Top100 plots" || echo "No changes"
           git push

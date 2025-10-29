@@ -1,4 +1,4 @@
-<!-- file: projects/sp500-rank-tracker/docs/index.html -->
+<!-- file: docs/index.html -->
 <!doctype html>
 <html>
 <head>
@@ -6,17 +6,58 @@
   <title>S&P 500 Rank Trends</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 20px; }
-    header { margin-bottom: 12px; }
-    .meta { color:#666; font-size:14px; }
-    iframe { width:100%; height:80vh; border:1px solid #ddd; border-radius:12px; }
+    :root { --bg:#fff; --fg:#111; --muted:#666; --border:#ddd; --btn:#f5f5f5; --btn-active:#111; --btn-active-fg:#fff; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg:#0f1115; --fg:#eaeef3; --muted:#a0a6ad; --border:#2a2f36; --btn:#1b1f27; --btn-active:#2563eb; --btn-active-fg:#fff; }
+    }
+    body { background:var(--bg); color:var(--fg); font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif; margin:20px; }
+    header { margin-bottom:12px; }
+    .meta { color:var(--muted); font-size:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .btns { display:flex; gap:8px; margin:12px 0 16px; }
+    button { border:1px solid var(--border); background:var(--btn); color:var(--fg); padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600; }
+    button.active { background:var(--btn-active); color:var(--btn-active-fg); border-color:var(--btn-active); }
+    iframe { width:100%; height:80vh; border:1px solid var(--border); border-radius:12px; background:#fff; }
+    .sep { opacity:.35; }
   </style>
 </head>
 <body>
   <header>
-    <h1>S&P 500 Rank Trends (Top 500; dropped=501)</h1>
-    <div class="meta">Auto-updated daily after market close. Hover lines for company details. Click legend to toggle series.</div>
+    <h1>S&P 500 Rank Trends</h1>
+    <div class="meta">
+      <span>Daily Top 500 kept; dropped = 501.</span>
+      <span class="sep">|</span>
+      <span id="ts">Last updated (page load, UTC): </span>
+      <span class="sep">|</span>
+      <a href="https://github.com/Tomandjerry1995/sp500-rank-tracker" target="_blank" rel="noreferrer">GitHub</a>
+    </div>
   </header>
-  <iframe src="latest.html"></iframe>
+
+  <div class="btns">
+    <button id="b50" class="active">Top 50</button>
+    <button id="b100">Top 100</button>
+  </div>
+
+  <iframe id="frame" src="latest-50.html"></iframe>
+
+  <script>
+    const ts = new Date().toISOString().replace('T',' ').replace('Z',' UTC');
+    document.getElementById('ts').textContent = "Last updated (page load, UTC): " + ts;
+
+    const frame = document.getElementById('frame');
+    const b50 = document.getElementById('b50');
+    const b100 = document.getElementById('b100');
+
+    function activate(btn50) {
+      if (btn50) {
+        b50.classList.add('active'); b100.classList.remove('active');
+        frame.src = 'latest-50.html';
+      } else {
+        b100.classList.add('active'); b50.classList.remove('active');
+        frame.src = 'latest-100.html';
+      }
+    }
+    b50.addEventListener('click', () => activate(true));
+    b100.addEventListener('click', () => activate(false));
+  </script>
 </body>
 </html>
