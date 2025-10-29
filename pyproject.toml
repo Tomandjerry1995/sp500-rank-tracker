@@ -1,0 +1,21 @@
+# file: projects/sp500-rank-tracker/pyproject.toml
+[project]
+name = "sp500-rank-tracker"
+version = "0.2.0"
+requires-python = ">=3.9"
+description = "Daily scrape S&P 500 ranks (top 500 kept, dropped=501) to SQLite; static & interactive plots."
+readme = ""
+dependencies = [
+  "requests",
+  "pandas",
+  "beautifulsoup4",
+  "matplotlib",
+  "plotly>=5.20.0",
+]
+
+[project.scripts]
+sp500 = "sp500_tracker.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"

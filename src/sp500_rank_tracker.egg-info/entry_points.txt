@@ -1,0 +1,2 @@
+[console_scripts]
+sp500 = sp500_tracker.cli:main

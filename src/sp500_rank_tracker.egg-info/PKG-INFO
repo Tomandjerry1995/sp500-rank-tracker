@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: sp500-rank-tracker
+Version: 0.2.0
+Summary: Daily scrape S&P 500 ranks (top 500 kept, dropped=501) to SQLite; static & interactive plots.
+Requires-Python: >=3.9
+Requires-Dist: requests
+Requires-Dist: pandas
+Requires-Dist: beautifulsoup4
+Requires-Dist: matplotlib
+Requires-Dist: plotly>=5.20.0

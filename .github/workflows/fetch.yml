@@ -1,0 +1,22 @@
+# file: projects/sp500-rank-tracker/.github/workflows/fetch.yml
+name: daily-fetch
+on:
+  schedule:
+    - cron: "5 22 * * 1-5"   # 工作日 22:05 UTC，按需改
+  workflow_dispatch: {}
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - run: python -m sp500_tracker.cli fetch --dropped-rank 9999
+      - name: Save DB as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sp500-ranks-sqlite
+          path: data/sp500_ranks.sqlite3
+          if-no-files-found: warn

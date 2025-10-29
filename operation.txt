@@ -1,0 +1,18 @@
+# 1) 重新安装依赖（加了 plotly）
+cd projects/sp500-rank-tracker
+source .venv/bin/activate
+pip install -e .
+
+# 2) 抓取（只记前500；掉出记501）
+sp500 fetch
+
+# 3) 交互大图（默认最多 100 条；可改到 500 条）
+sp500 plot --interactive --top 500 --since 2025-10-01 --max-lines 100
+# 打开 HTML（macOS）
+open data/plots
+
+# 4) 一把梭 500 条（文件较大、浏览器会比较吃力）
+sp500 plot --interactive --top 500 --max-lines 500
+
+# 5) 小图 PNG（静态）
+sp500 plot --symbols AAPL,MSFT,GOOGL --since 2025-10-01
