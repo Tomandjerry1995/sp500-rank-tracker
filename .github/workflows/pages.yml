@@ -80,11 +80,15 @@ jobs:
           b50.onclick=()=>set(50); b100.onclick=()=>set(100);
           </script></body></html>
           HTML
-
       - name: Commit docs & DB
         run: |
+          set -e
+          test -f data/sp500_ranks.sqlite3
+          ls -lh data/sp500_ranks.sqlite3
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/latest-50.html docs/latest-100.html docs/index.html data/sp500_ranks.sqlite3
-          git commit -m "daily: fetch + migrate (>501->501) + plots (Top50/Top100)" || echo "No changes"
+          git add -f data/sp500_ranks.sqlite3
+          git add docs/latest-50.html docs/latest-100.html docs/index.html
+          git commit -m "daily: fetch+migrate+plots+db" || echo "No changes"
           git push
+
