@@ -1,63 +1,38 @@
-<!-- file: docs/index.html -->
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>S&P 500 Rank Trends</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    :root { --bg:#fff; --fg:#111; --muted:#666; --border:#ddd; --btn:#f5f5f5; --btn-active:#111; --btn-active-fg:#fff; }
-    @media (prefers-color-scheme: dark) {
-      :root { --bg:#0f1115; --fg:#eaeef3; --muted:#a0a6ad; --border:#2a2f36; --btn:#1b1f27; --btn-active:#2563eb; --btn-active-fg:#fff; }
-    }
-    body { background:var(--bg); color:var(--fg); font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif; margin:20px; }
-    header { margin-bottom:12px; }
-    .meta { color:var(--muted); font-size:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-    .btns { display:flex; gap:8px; margin:12px 0 16px; }
-    button { border:1px solid var(--border); background:var(--btn); color:var(--fg); padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600; }
-    button.active { background:var(--btn-active); color:var(--btn-active-fg); border-color:var(--btn-active); }
-    iframe { width:100%; height:80vh; border:1px solid var(--border); border-radius:12px; background:#fff; }
-    .sep { opacity:.35; }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>S&P 500 Rank Trends</h1>
-    <div class="meta">
-      <span>Daily Top 500 kept; dropped = 501.</span>
-      <span class="sep">|</span>
-      <span id="ts">Last updated (page load, UTC): </span>
-      <span class="sep">|</span>
-      <a href="https://github.com/Tomandjerry1995/sp500-rank-tracker" target="_blank" rel="noreferrer">GitHub</a>
-    </div>
-  </header>
+<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>S&P 500 Rank Trends</title>
+<style>
+  :root{--bg:#111827;--fg:#e5e7eb;--muted:#9ca3af;--border:#374151;}
+  body{background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif;margin:20px}
+  .meta{color:var(--muted);font-size:14px;margin-bottom:8px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+  button{border:1px solid var(--border);background:#1f2937;color:var(--fg);padding:8px 12px;border-radius:10px;cursor:pointer;font-weight:600}
+  button.active{background:#2563eb;border-color:#2563eb}
+  iframe{width:100%;height:80vh;border:1px solid var(--border);border-radius:12px;background:#fff}
+</style></head><body>
+<h1>S&P 500 Rank Trends</h1>
+<div class="meta">Daily top-500 kept; dropped = 501. Last update (UTC): <span id="ts"></span></div>
 
-  <div class="btns">
-    <button id="b50" class="active">Top 50</button>
-    <button id="b100">Top 100</button>
-  </div>
+<div class="row">
+  <button id="b50" class="active">Top 50</button>
+  <button id="b100">Top 100</button>
+</div>
+<div class="row">
+  <button data-url="latest-100.html?lo=1&hi=100">1–100</button>
+  <button data-url="latest-100.html?lo=400&hi=450">400–450</button>
+  <button data-url="latest-100.html?lo=450&hi=500">450–500</button>
+  <button data-url="latest-100.html?lo=1&hi=100&changed=1">Top100(仅变化)</button>
+</div>
 
-  <iframe id="frame" src="latest-50.html"></iframe>
+<iframe id="frame" src="latest-50.html"></iframe>
 
-  <script>
-    const ts = new Date().toISOString().replace('T',' ').replace('Z',' UTC');
-    document.getElementById('ts').textContent = "Last updated (page load, UTC): " + ts;
-
-    const frame = document.getElementById('frame');
-    const b50 = document.getElementById('b50');
-    const b100 = document.getElementById('b100');
-
-    function activate(btn50) {
-      if (btn50) {
-        b50.classList.add('active'); b100.classList.remove('active');
-        frame.src = 'latest-50.html';
-      } else {
-        b100.classList.add('active'); b50.classList.remove('active');
-        frame.src = 'latest-100.html';
-      }
-    }
-    b50.addEventListener('click', () => activate(true));
-    b100.addEventListener('click', () => activate(false));
-  </script>
-</body>
-</html>
+<script>
+const ts=new Date().toISOString().replace('T',' ').replace('Z',' UTC');document.getElementById('ts').textContent=ts;
+const f=document.getElementById('frame');const b50=document.getElementById('b50');const b100=document.getElementById('b100');
+function setTab(n){ if(n===50){b50.classList.add('active');b100.classList.remove('active');f.src='latest-50.html';}
+                    else{b100.classList.add('active');b50.classList.remove('active');f.src='latest-100.html';}}
+b50.onclick=()=>setTab(50); b100.onclick=()=>setTab(100);
+document.querySelectorAll('button[data-url]').forEach(btn=>{
+  btn.onclick=()=>{ b50.classList.remove('active'); b100.classList.add('active'); f.src=btn.dataset.url; };
+});
+</script>
+</body></html>

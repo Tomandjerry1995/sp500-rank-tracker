@@ -8,3 +8,4 @@ src/sp500_rank_tracker.egg-info/top_level.txt
 src/sp500_tracker/__init__.py
 src/sp500_tracker/cli.py
 src/sp500_tracker/core.py
+src/sp500_tracker/templates/interactive.html.j2

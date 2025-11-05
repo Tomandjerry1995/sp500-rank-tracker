@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>S&P 500 Rank Trends</title>
+  <style>
+    :root { --border:#ddd; --muted:#666; --bg:#fff; --fg:#111; --btn:#1f6feb; --btn-fg:#fff; }
+    @media (prefers-color-scheme: dark) { :root { --border:#2a2f36; --muted:#a0a6ad; --bg:#0f1115; --fg:#eaeef3; } }
+    body { background:var(--bg); color:var(--fg); font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif; margin:12px; }
+    .toolbar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:8px 0 16px; }
+    .toolbar input[type=number] { width:90px; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--fg); }
+    .toolbar label { color:var(--muted); }
+    .toolbar button { padding:8px 12px; border:1px solid var(--border); border-radius:8px; background:var(--btn); color:var(--btn-fg); font-weight:600; cursor:pointer; }
+    .note { color:var(--muted); font-size:13px; margin-top:4px; }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <label><input type="checkbox" id="changedOnly"/> 仅看“相较昨日有变化”</label>
+    <label>今日名次:
+      <input type="number" id="lo" min="1" max="{{ dropped }}" value="{{ default_lo }}"/>
+      —
+      <input type="number" id="hi" min="1" max="{{ dropped }}" value="{{ default_hi }}"/>
+    </label>
+    <button id="applyBtn">应用筛选</button>
+    <span class="note">图例可点击隐藏/显示；纵轴向上=名次更高；{{ dropped }} 表示“掉出”。</span>
+  </div>
+
+  {{ plot_div | safe }}
+
+  <script>
+  (function() {
+    const gd = document.getElementById('rankplot');
+    const loInput = document.getElementById('lo');
+    const hiInput = document.getElementById('hi');
+    const changedOnly = document.getElementById('changedOnly');
+    const applyBtn = document.getElementById('applyBtn');
+
+    function parsePreset() {
+      const qs = new URLSearchParams(location.search || "");
+      const lo = parseInt(qs.get("lo"));
+      const hi = parseInt(qs.get("hi"));
+      const changed = qs.get("changed");
+      if (!Number.isNaN(lo)) loInput.value = Math.max(1, Math.min({{ dropped }}, lo));
+      if (!Number.isNaN(hi)) hiInput.value = Math.max(1, Math.min({{ dropped }}, hi));
+      if (changed === "1" || changed === "true") changedOnly.checked = true;
+    }
+
+    function applyFilter() {
+      let lo = parseInt(loInput.value) || 1;
+      let hi = parseInt(hiInput.value) || {{ dropped }};
+      if (lo > hi) { const t=lo; lo=hi; hi=t; loInput.value=lo; hiInput.value=hi; }
+      const changed = changedOnly.checked;
+
+      const vis = (gd.data || []).map(function(tr) {
+        const meta = tr.meta || {};
+        const r = meta.today_rank != null ? parseInt(meta.today_rank) : {{ dropped }};
+        const ch = !!meta.changed;
+        const inRange = (r >= lo) && (r <= hi);
+        const match = inRange && (!changed || ch);
+        return match ? true : 'legendonly';
+      });
+      if (vis.length) {
+        Plotly.restyle(gd, 'visible', vis).then(function() {
+          return Plotly.relayout(gd, {'yaxis.autorange': 'reversed'});
+        });
+      }
+    }
+
+    changedOnly.addEventListener('change', applyFilter);
+    loInput.addEventListener('change', applyFilter);
+    hiInput.addEventListener('change', applyFilter);
+    loInput.addEventListener('keyup', (e)=>{ if (e.key==='Enter') applyFilter(); });
+    hiInput.addEventListener('keyup', (e)=>{ if (e.key==='Enter') applyFilter(); });
+    applyBtn.addEventListener('click', applyFilter);
+
+    gd.on('plotly_legendclick', function(){ setTimeout(()=>Plotly.relayout(gd, {'yaxis.autorange':'reversed'}), 0); });
+    gd.on('plotly_legenddoubleclick', function(){ setTimeout(()=>Plotly.relayout(gd, {'yaxis.autorange':'reversed'}), 0); });
+
+    // 读取 URL 预设后再应用
+    parsePreset();
+    if (document.readyState === 'complete') applyFilter();
+    else window.addEventListener('load', applyFilter);
+  })();
+  </script>
+</body>
+</html>

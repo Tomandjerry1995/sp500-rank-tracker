@@ -1,10 +1,9 @@
 # file: projects/sp500-rank-tracker/src/sp500_tracker/core.py
 """
-Core logic: scrape, store (top-500, dropped=501), query, plot (static & interactive).
-
+Core: scrape, store (top-500; dropped=501), query, plot (PNG & interactive HTML via Jinja2).
 Why:
-- Keep daily top 500 for signal density; mark known-but-missing as 501 to keep series continuous.
-- Interactive HTML (Plotly) helps explore many series (hover names, toggle legend).
+- 统一规则：当天榜单只保留前500；历史出现但当天不在前500 → 记 501（持续不进前500则每天记501）。
+- 交互图：支持“仅看昨日有变化”与“今日名次区间”过滤；默认包含所有（≈500）曲线，靠控件筛选可见性。
 """
 import datetime as dt
 import os
@@ -43,9 +42,8 @@ def make_session() -> requests.Session:
         raise_on_status=False,
     )
     ad = HTTPAdapter(max_retries=retries, pool_connections=4, pool_maxsize=8)
-    s.mount("http://", ad)
-    s.mount("https://", ad)
-    s.headers.update({"User-Agent": "sp500-rank-tracker/0.2"})
+    s.mount("http://", ad); s.mount("https://", ad)
+    s.headers.update({"User-Agent": "sp500-rank-tracker/0.4"})
     return s
 
 
@@ -65,14 +63,13 @@ def _resolve_columns(df: pd.DataFrame) -> Tuple[int, int, int]:
                 return i
         raise KeyError(f"Missing columns like {cands}, got {norm}")
 
-    rank_idx = find_one({"", "rank"})  # "#" often becomes ""
+    rank_idx = find_one({"", "rank"})  # "#" often parsed empty
     symbol_idx = find_one({"symbol", "ticker"})
     company_idx = find_one({"company", "name"})
     return rank_idx, symbol_idx, company_idx
 
 
 def fetch_today_table() -> pd.DataFrame:
-    """Scrape the table and return cleaned DataFrame with columns rank/symbol/company."""
     sess = make_session()
     resp: Response = sess.get(SLICKCHARTS_URL, timeout=20)
     if resp.status_code != 200 or not resp.text:
@@ -110,7 +107,7 @@ def fetch_today_table() -> pd.DataFrame:
     return cleaned
 
 
-# --- DB ---
+# ---------- DB ----------
 def connect_db(db_path: str) -> sqlite3.Connection:
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     conn = sqlite3.connect(db_path)
@@ -154,25 +151,22 @@ def insert_rows_present(conn: sqlite3.Connection, date_str: str, df: pd.DataFram
         )
         if cur.rowcount > 0:
             inserted += 1
-    conn.commit()
-    return inserted
+    conn.commit(); return inserted
 
 
 def insert_rows_dropped(
     conn: sqlite3.Connection, date_str: str, drops: Set[str], dropped_rank: int
 ) -> int:
-    cur = conn.cursor()
-    inserted = 0
+    cur = conn.cursor(); inserted = 0
     for sym in sorted(drops):
-        name = latest_company_name(conn, sym) or sym  # why: human-readable even if new
+        name = latest_company_name(conn, sym) or sym  # why: keep human-readable
         cur.execute(
             "INSERT OR IGNORE INTO rank_history(date, symbol, company, rank) VALUES (?, ?, ?, ?)",
             (date_str, sym, name, dropped_rank),
         )
         if cur.rowcount > 0:
             inserted += 1
-    conn.commit()
-    return inserted
+    conn.commit(); return inserted
 
 
 def query_history(
@@ -183,36 +177,24 @@ def query_history(
     until: Optional[str] = None,
     top: Optional[int] = None,
 ) -> pd.DataFrame:
-    params: List[object] = []
-    where: List[str] = []
+    params: List[object] = []; where: List[str] = []
+    if since: where.append("date >= ?"); params.append(since)
+    if until: where.append("date <= ?"); params.append(until)
 
-    if since:
-        where.append("date >= ?"); params.append(since)
-    if until:
-        where.append("date <= ?"); params.append(until)
-
-    # '=' for single, IN(...) for multiple
     if symbols:
         syms = [s.upper().strip() for s in symbols if s.strip()]
-        if len(syms) == 1:
-            where.append("symbol = ?")
-            params.append(syms[0])
+        if len(syms) == 1: where.append("symbol = ?"); params.append(syms[0])
         else:
-            qs = ",".join("?" for _ in syms)
-            where.append(f"symbol IN ({qs})")
-            params.extend(syms)
+            where.append(f"symbol IN ({','.join('?' for _ in syms)})"); params.extend(syms)
 
-    if company_substr:
-        where.append("LOWER(company) LIKE ?"); params.append(f"%{company_substr.lower()}%")
+    if company_substr: where.append("LOWER(company) LIKE ?"); params.append(f"%{company_substr.lower()}%")
 
     base_sql = "SELECT * FROM rank_history"
     if top:
         sub_where = " AND ".join(where) if where else "1=1"
-        sql = f"{base_sql} WHERE {sub_where} AND rank <= ?"
-        bind = tuple(params + [top])
+        sql = f"{base_sql} WHERE {sub_where} AND rank <= ?"; bind = tuple(params + [top])
     else:
-        sql = base_sql + (" WHERE " + " AND ".join(where) if where else "")
-        bind = tuple(params)
+        sql = base_sql + (" WHERE " + " AND ".join(where) if where else ""); bind = tuple(params)
 
     df = pd.read_sql_query(sql, conn, params=bind)
     if not df.empty:
@@ -223,44 +205,30 @@ def query_history(
     return df
 
 
-# --- Plotting (matplotlib static) ---
+# ---------- Static plot ----------
 def plot_rank(df: pd.DataFrame, outfile: str, title: str, dropped_rank: int) -> str:
     import matplotlib.pyplot as plt
-
-    if df.empty:
-        raise ValueError("No data to plot")
-
-    df = df.copy()
-    df.loc[df["rank"] > dropped_rank, "rank"] = dropped_rank
-
-    pivot = (
-        df.pivot_table(index="date", columns="symbol", values="rank", aggfunc="first")
-        .sort_index()
-    )
-
+    if df.empty: raise ValueError("No data to plot")
+    df = df.copy(); df.loc[df["rank"] > dropped_rank, "rank"] = dropped_rank
+    pivot = df.pivot_table(index="date", columns="symbol", values="rank", aggfunc="first").sort_index()
     ax = pivot.plot(figsize=(10, 6), marker="o")
-    ax.set_title(title)
-    ax.set_xlabel("Date (UTC)")
-    ax.set_ylabel("Rank (lower is better)")
-    ax.invert_yaxis()
-    ax.grid(True, linestyle="--", alpha=0.4)
-
+    ax.set_title(title); ax.set_xlabel("Date (UTC)")
+    ax.set_ylabel(f"Rank (lower is better; {dropped_rank} = dropped)")
+    ax.invert_yaxis(); ax.grid(True, linestyle="--", alpha=0.4)
     os.makedirs(os.path.dirname(outfile), exist_ok=True)
-    import matplotlib
-    # why: ensure non-GUI save works on servers
-    # (matplotlib will pick Agg backend automatically in most CLIs)
-    import matplotlib.pyplot as plt  # re-import safe
-    plt.tight_layout()
-    plt.savefig(outfile, dpi=150)
-    plt.close()
+    import matplotlib.pyplot as plt; plt.tight_layout(); plt.savefig(outfile, dpi=150); plt.close()
     return outfile
 
 
-# --- Plotting (plotly interactive) ---
-def _select_symbols_for_plot(df: pd.DataFrame, limit: int) -> List[str]:
-    """Pick up to `limit` symbols by best (min) rank across the period; stable ordering."""
-    agg = df.groupby("symbol")["rank"].min().sort_values().reset_index()
-    return agg.head(limit)["symbol"].tolist()
+# ---------- Interactive plot (Plotly + Jinja2) ----------
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+import plotly.graph_objects as go
+
+def _last_two_dates(df: pd.DataFrame) -> Tuple[Optional[pd.Timestamp], Optional[pd.Timestamp]]:
+    if df.empty: return None, None
+    dates = sorted(pd.to_datetime(df["date"]).unique())
+    if len(dates) == 1: return dates[-1], None
+    return dates[-1], dates[-2]
 
 
 def plot_interactive(
@@ -269,58 +237,76 @@ def plot_interactive(
     title: str,
     dropped_rank: int,
     max_lines: int,
+    include_all: bool = True,
+    default_lo: int = 1,
+    default_hi: Optional[int] = None,
 ) -> str:
-    """Interactive HTML with hover (symbol/company/date/rank)."""
-    import plotly.graph_objects as go
+    """Render interactive HTML:
+    - include_all=True: 按“今天名次”把所有(<=dropped_rank)都画出（≈500）；否则仅取前 max_lines。
+    - 顶部控件：仅看昨日有变化 + 今日名次区间。
+    """
+    if df.empty: raise ValueError("No data to plot")
+    df = df.copy(); df.loc[df["rank"] > dropped_rank, "rank"] = dropped_rank
 
-    if df.empty:
-        raise ValueError("No data to plot")
+    latest, prev = _last_two_dates(df)
+    if latest is None: raise ValueError("No latest date found")
 
-    df = df.copy()
-    df.loc[df["rank"] > dropped_rank, "rank"] = dropped_rank
-
-    # choose symbols to draw
-    symbols = _select_symbols_for_plot(df, max_lines)
+    today_map: Dict[str, int] = (
+        df[pd.to_datetime(df["date"]) == latest]
+        .groupby("symbol")["rank"].first().astype(int).to_dict()
+    )
+    # 仅保留今天有名次的
+    today_sorted_syms = [s for s, r in sorted(today_map.items(), key=lambda kv: kv[1]) if r <= dropped_rank]
+    symbols = today_sorted_syms if include_all else today_sorted_syms[:max_lines]
     df = df[df["symbol"].isin(symbols)]
 
-    # latest company name per symbol for hover
-    last_names: Dict[str, str] = (
-        df.sort_values("date").groupby("symbol")["company"].last().to_dict()
-    )
+    changed_set: Set[str] = set()
+    if prev is not None:
+        prev_map = (
+            df[pd.to_datetime(df["date"]) == prev]
+            .groupby("symbol")["rank"].first().astype(int).to_dict()
+        )
+        for s in set(today_map) | set(prev_map):
+            if today_map.get(s, dropped_rank) != prev_map.get(s, dropped_rank):
+                changed_set.add(s)
+
+    last_names: Dict[str, str] = df.sort_values("date").groupby("symbol")["company"].last().to_dict()
 
     fig = go.Figure()
     for sym in symbols:
         sub = df[df["symbol"] == sym].sort_values("date")
         company = last_names.get(sym, "")
+        today_rank = int(today_map.get(sym, dropped_rank))
+        changed = bool(sym in changed_set)
         fig.add_trace(
             go.Scatter(
-                x=sub["date"],
-                y=sub["rank"],
-                mode="lines+markers",
-                name=f"{sym}",
-                hovertemplate=(
-                    "<b>%{customdata[0]} (%{legendgroup})</b><br>"
-                    "Date: %{x}<br>"
-                    "Rank: %{y}<extra></extra>"
-                ),
-                legendgroup=sym,
+                x=sub["date"], y=sub["rank"],
+                mode="lines+markers", name=f"{sym}", legendgroup=sym,
+                hovertemplate="<b>%{customdata[0]} (%{legendgroup})</b><br>Date: %{x}<br>Rank: %{y}<extra></extra>",
                 customdata=[[company] for _ in range(len(sub))],
+                meta=dict(symbol=sym, company=company, today_rank=today_rank, changed=changed),
             )
         )
 
     fig.update_layout(
         title=title,
         xaxis_title="Date (UTC)",
-        yaxis_title="Rank (lower is better; 501 = dropped)",
-        hovermode="x unified",
+        yaxis_title=f"Rank (lower is better; {dropped_rank} = dropped)",
+        hovermode="closest",
         template="plotly_white",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-        width=1200,
-        height=700,
-        margin=dict(l=60, r=20, t=80, b=60),
+        legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="left", x=0),
+        margin=dict(l=60, r=20, t=70, b=140),
+        width=1200, height=720,
     )
-    fig.update_yaxes(autorange="reversed")  # lower rank at top
+    fig.update_yaxes(autorange="reversed")
+
+    templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+    env = Environment(loader=FileSystemLoader(templates_dir), autoescape=select_autoescape())
+    tmpl = env.get_template("interactive.html.j2")
+    plot_div = fig.to_html(full_html=False, include_plotlyjs="cdn", div_id="rankplot")
+    if default_hi is None: default_hi = max_lines
+    html = tmpl.render(plot_div=plot_div, dropped=dropped_rank, default_lo=int(default_lo), default_hi=int(default_hi))
 
     os.makedirs(os.path.dirname(outfile_html), exist_ok=True)
-    fig.write_html(outfile_html, include_plotlyjs="cdn")
+    with open(outfile_html, "w", encoding="utf-8") as f: f.write(html)
     return outfile_html
