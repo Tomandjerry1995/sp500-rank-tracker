@@ -3,7 +3,7 @@ name: pages-daily
 
 on:
   schedule:
-    - cron: "0 0 * * *"   # 每天 UTC 00:00 = 北京时间 08:00
+    - cron: "0 1 * * 2-6"   # Tue–Sat 01:00 UTC = 北京时间 09:00（覆盖美股 Mon–Fri 交易日）
   workflow_dispatch: {}
 
 permissions:
